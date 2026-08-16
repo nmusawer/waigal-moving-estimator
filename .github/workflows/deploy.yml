@@ -1,0 +1,55 @@
+name: Deploy estimator API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write        # OIDC — no long-lived AWS keys in GitHub secrets
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Build
+        run: sam build --use-container
+
+      - name: Deploy
+        run: |
+          sam deploy \
+            --stack-name waigal-estimator-prod \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --capabilities CAPABILITY_IAM \
+            --resolve-s3 \
+            --parameter-overrides \
+              Stage=prod \
+              AllowedOrigin=https://waigalmovers.com \
+              FromAddress=quotes@waigalmovers.com \
+              OwnerEmail=${{ secrets.OWNER_EMAIL }}
+
+      - name: Publish the estimator page
+        run: |
+          aws s3 cp web/index.html s3://${{ secrets.SITE_BUCKET }}/estimate/index.html \
+            --cache-control "public,max-age=300"
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
+            --paths "/estimate/*"

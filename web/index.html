@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moving Cost Estimator — Waigal Movers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root{
+  --ink:#131C2B;
+  --panel:#1B2739;
+  --line:#2C3B52;
+  --paper:#EEF1F5;
+  --card:#FFFFFF;
+  --edge:#D6DEE8;
+  --haul:#F0A831;
+  --haul-deep:#B87A12;
+  --go:#43C08D;
+  --muted:#7D8FA8;
+  --muted-dark:#5C6B80;
+
+  --display:'Archivo',system-ui,sans-serif;
+  --body:'Public Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+
+  --r:4px;
+  --pad:clamp(16px,3vw,28px);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--body);
+  background:var(--paper);
+  color:var(--ink);
+  font-size:16px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.topbar{
+  background:var(--ink);
+  color:var(--paper);
+  padding:14px var(--pad);
+  display:flex;align-items:baseline;gap:14px;
+  border-bottom:3px solid var(--haul);
+}
+.mark{
+  font-family:var(--display);font-weight:800;
+  font-size:19px;letter-spacing:-.02em;text-transform:uppercase;
+}
+.mark span{color:var(--haul)}
+.topbar .tag{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  letter-spacing:.08em;text-transform:uppercase;
+}
+.topbar .phone{
+  margin-left:auto;font-family:var(--mono);font-size:13px;
+  color:var(--paper);text-decoration:none;border-bottom:1px solid var(--line);
+}
+.topbar .phone:hover{border-color:var(--haul)}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.rig{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 380px;
+  gap:0;
+  align-items:start;
+  max-width:1240px;margin:0 auto;
+}
+.formcol{padding:var(--pad) var(--pad) 200px}
+.loadcol{
+  position:sticky;top:0;
+  background:var(--ink);
+  color:var(--paper);
+  min-height:100vh;
+  padding:var(--pad);
+}
+
+/* ============================================================
+   INTRO
+   ============================================================ */
+.intro{max-width:60ch;margin-bottom:38px}
+.intro h1{
+  font-family:var(--display);font-weight:800;
+  font-size:clamp(30px,4.4vw,46px);line-height:1.02;
+  letter-spacing:-.03em;margin-bottom:14px;
+}
+.intro h1 em{font-style:normal;color:var(--haul-deep)}
+.intro p{color:var(--muted-dark);font-size:16.5px}
+
+/* ============================================================
+   STEPS
+   ============================================================ */
+.step{
+  background:var(--card);
+  border:1px solid var(--edge);
+  border-radius:var(--r);
+  padding:22px;
+  margin-bottom:14px;
+}
+.step > header{
+  display:flex;align-items:center;gap:11px;
+  margin-bottom:6px;
+}
+.step .num{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  background:var(--ink);color:var(--haul);
+  width:22px;height:22px;flex:none;
+  display:grid;place-items:center;border-radius:2px;
+}
+.step h2{
+  font-family:var(--display);font-weight:600;
+  font-size:17px;letter-spacing:-.01em;
+}
+.step .hint{
+  font-size:13.5px;color:var(--muted-dark);
+  margin:0 0 16px 33px;
+}
+.sub{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted-dark);
+  margin:20px 0 9px;
+}
+.sub:first-of-type{margin-top:0}
+
+/* ---- segmented choice ---- */
+.seg{display:flex;flex-wrap:wrap;gap:7px}
+.seg button{
+  font-family:var(--body);font-size:14px;font-weight:500;
+  padding:9px 14px;
+  background:var(--paper);
+  border:1px solid var(--edge);
+  border-radius:var(--r);
+  color:var(--ink);cursor:pointer;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.seg button:hover{border-color:var(--muted)}
+.seg button[aria-pressed="true"]{
+  background:var(--ink);border-color:var(--ink);color:#fff;
+}
+.seg button[aria-pressed="true"] small{color:var(--haul)}
+.seg button small{
+  display:block;font-family:var(--mono);font-size:10px;
+  color:var(--muted-dark);margin-top:2px;
+}
+
+/* ---- counters ---- */
+.items{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  gap:8px;
+}
+.item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;
+  border:1px solid var(--edge);border-radius:var(--r);
+  background:var(--paper);
+}
+.item.on{background:#fff;border-color:var(--ink)}
+.item .nm{flex:1;min-width:0;font-size:14px;line-height:1.25}
+.item .nm b{display:block;font-weight:500}
+.item .nm i{
+  font-style:normal;font-family:var(--mono);
+  font-size:10.5px;color:var(--muted-dark);
+}
+.stepper{display:flex;align-items:center;gap:2px;flex:none}
+.stepper button{
+  width:26px;height:26px;flex:none;
+  border:1px solid var(--edge);background:#fff;
+  border-radius:2px;cursor:pointer;
+  font-size:15px;line-height:1;color:var(--ink);
+}
+.stepper button:hover{border-color:var(--ink)}
+.stepper button:disabled{opacity:.3;cursor:default}
+.stepper output{
+  font-family:var(--mono);font-size:14px;font-weight:600;
+  width:26px;text-align:center;
+}
+
+/* ---- fields ---- */
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+label.f{display:block}
+label.f span{
+  display:block;font-size:12.5px;font-weight:500;
+  color:var(--muted-dark);margin-bottom:5px;
+}
+input[type=text],input[type=number],input[type=email],
+input[type=tel],input[type=date],select,textarea{
+  width:100%;font-family:var(--body);font-size:15px;
+  padding:9px 11px;
+  border:1px solid var(--edge);border-radius:var(--r);
+  background:var(--paper);color:var(--ink);
+}
+input:focus-visible,select:focus-visible,textarea:focus-visible,
+button:focus-visible{
+  outline:2px solid var(--haul-deep);outline-offset:2px;
+}
+textarea{resize:vertical;min-height:70px}
+input[type=number]{font-family:var(--mono)}
+
+/* ---- checkbox row ---- */
+.checks{display:grid;gap:7px}
+.chk{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px;border:1px solid var(--edge);
+  border-radius:var(--r);background:var(--paper);cursor:pointer;
+}
+.chk:has(input:checked){background:#fff;border-color:var(--ink)}
+.chk input{margin-top:3px;accent-color:var(--haul-deep);flex:none}
+.chk div{font-size:14px;line-height:1.35}
+.chk div small{
+  display:block;color:var(--muted-dark);
+  font-family:var(--mono);font-size:10.5px;margin-top:2px;
+}
+
+/* ============================================================
+   LOAD PANEL  (the signature)
+   ============================================================ */
+.loadcol h3{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+  padding-bottom:9px;border-bottom:1px solid var(--line);
+  margin-bottom:16px;
+}
+.bay{width:100%;height:auto;display:block;margin-bottom:6px}
+.bay .body{fill:none;stroke:var(--line);stroke-width:2}
+.bay .fill{fill:var(--haul);transition:height .45s cubic-bezier(.3,.8,.35,1),y .45s cubic-bezier(.3,.8,.35,1),fill .3s}
+.bay .fill.over{fill:#E8623F}
+.bay .tick{stroke:var(--line);stroke-width:1;stroke-dasharray:3 3}
+.bay .tick.passed{stroke:var(--haul-deep);stroke-dasharray:none}
+.bay .ticklabel{
+  font-family:var(--mono);font-size:8px;fill:var(--muted);
+}
+.bay .ticklabel.passed{fill:var(--haul)}
+.bay .wheel{fill:var(--line)}
+.bay .cab{fill:var(--panel);stroke:var(--line);stroke-width:2}
+
+.readout{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:1px;background:var(--line);
+  border:1px solid var(--line);margin-bottom:16px;
+}
+.readout div{background:var(--ink);padding:11px 12px}
+.readout dt{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:4px;
+}
+.readout dd{
+  font-family:var(--display);font-weight:600;
+  font-size:19px;letter-spacing:-.01em;
+}
+.readout dd small{
+  font-family:var(--mono);font-weight:400;font-size:11px;
+  color:var(--muted);margin-left:3px;
+}
+
+.quote{
+  border:1px solid var(--line);
+  border-left:3px solid var(--haul);
+  padding:16px;margin-bottom:14px;
+}
+.quote .lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:7px;
+}
+.quote .band{
+  font-family:var(--display);font-weight:800;
+  font-size:clamp(28px,3.4vw,36px);letter-spacing:-.035em;
+  line-height:1;color:var(--haul);
+}
+.quote .band .dash{color:var(--line);margin:0 5px;font-weight:600}
+.quote .basis{
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  margin-top:9px;line-height:1.55;
+}
+
+.breakdown{border-top:1px solid var(--line);margin-bottom:16px}
+.breakdown .row{
+  display:flex;justify-content:space-between;gap:12px;
+  padding:8px 0;border-bottom:1px solid var(--line);
+  font-size:13px;
+}
+.breakdown .row span:last-child{font-family:var(--mono);flex:none}
+.breakdown .row.muted span{color:var(--muted)}
+
+.cta{
+  display:block;width:100%;text-align:center;
+  font-family:var(--display);font-weight:600;font-size:15px;
+  padding:14px;border:none;border-radius:var(--r);
+  background:var(--haul);color:var(--ink);
+  cursor:pointer;transition:background .15s;
+}
+.cta:hover{background:#FFC15E}
+.cta:disabled{background:var(--line);color:var(--muted);cursor:default}
+.finelabel{
+  font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  margin-top:10px;line-height:1.6;
+}
+
+/* ============================================================
+   RESULT STATE
+   ============================================================ */
+.result{
+  display:none;border:1px solid var(--go);
+  border-left:3px solid var(--go);padding:16px;margin-top:14px;
+}
+.result.show{display:block}
+.result b{
+  font-family:var(--display);font-size:15px;
+  color:var(--go);display:block;margin-bottom:6px;
+}
+.result p{font-size:13.5px;color:var(--muted);line-height:1.6}
+.result a{color:var(--haul)}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+@media (max-width:940px){
+  .rig{grid-template-columns:1fr}
+  .formcol{padding-bottom:calc(var(--pad) + 190px)}
+  .loadcol{
+    position:fixed;bottom:0;left:0;right:0;top:auto;
+    min-height:0;max-height:88vh;overflow-y:auto;
+    border-top:3px solid var(--haul);
+    padding:14px var(--pad) 18px;
+    z-index:20;
+  }
+  .loadcol[data-open="false"] .collapsible{display:none}
+  .drawer{
+    display:flex;align-items:center;gap:12px;
+    width:100%;background:none;border:none;
+    color:var(--paper);cursor:pointer;padding:0 0 12px;
+    font-family:var(--display);font-weight:600;font-size:15px;
+  }
+  .drawer .amt{color:var(--haul);font-size:20px;letter-spacing:-.02em}
+  .drawer .chev{margin-left:auto;color:var(--muted);font-size:13px}
+  .loadcol h3{display:none}
+}
+@media (min-width:941px){
+  .drawer{display:none}
+  .collapsible{display:block !important}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="mark">Waigal<span>/</span>Movers</div>
+  <div class="tag">Charlottesville, VA</div>
+  <a class="phone" href="mailto:booking@waigalmovers.com">booking@waigalmovers.com</a>
+</header>
+
+<div class="rig">
+
+<!-- ================= FORM ================= -->
+<div class="formcol">
+
+  <div class="intro">
+    <h1>Tell us what you're moving. <em>Get a number now.</em></h1>
+    <p>Answer five short sections and watch the load meter fill. You'll see your truck size, crew size, and price range before you talk to anyone.</p>
+  </div>
+
+  <!-- STEP 1 -->
+  <section class="step">
+    <header><div class="num">1</div><h2>Home size</h2></header>
+    <p class="hint">This sets your starting volume. We adjust it in the next step.</p>
+
+    <p class="sub">Place you're moving out of</p>
+    <div class="seg" id="homeSize"></div>
+
+    <p class="sub">How full is it?</p>
+    <div class="seg" id="density"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step">
+    <header><div class="num">2</div><h2>Bulky &amp; specialty items</h2></header>
+    <p class="hint">Only the things that change a crew's day. Boxes and normal furniture are already counted above.</p>
+    <div class="items" id="items"></div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step">
+    <header><div class="num">3</div><h2>Distance &amp; access</h2></header>
+    <p class="hint">Under 50 miles is billed hourly. Beyond that we switch to a flat long-distance rate.</p>
+
+    <div class="fields">
+      <label class="f"><span>Pickup ZIP</span><input type="text" id="zipFrom" inputmode="numeric" maxlength="5" placeholder="22901"></label>
+      <label class="f"><span>Delivery ZIP</span><input type="text" id="zipTo" inputmode="numeric" maxlength="5" placeholder="23220"></label>
+      <label class="f"><span>Driving miles</span><input type="number" id="miles" min="0" max="4000" value="12"></label>
+    </div>
+
+    <p class="sub">Pickup access</p>
+    <div class="fields">
+      <label class="f"><span>Flights of stairs</span>
+        <select id="stairsFrom"><option value="0">Ground floor</option><option value="1">1 flight</option><option value="2">2 flights</option><option value="3">3+ flights</option></select>
+      </label>
+      <label class="f"><span>Elevator</span>
+        <select id="elevFrom"><option value="0">No elevator</option><option value="1">Yes, elevator</option></select>
+      </label>
+      <label class="f"><span>Carry to truck</span>
+        <select id="carryFrom"><option value="0">Under 75 ft</option><option value="1">Over 75 ft</option></select>
+      </label>
+    </div>
+
+    <p class="sub">Delivery access</p>
+    <div class="fields">
+      <label class="f"><span>Flights of stairs</span>
+        <select id="stairsTo"><option value="0">Ground floor</option><option value="1">1 flight</option><option value="2">2 flights</option><option value="3">3+ flights</option></select>
+      </label>
+      <label class="f"><span>Elevator</span>
+        <select id="elevTo"><option value="0">No elevator</option><option value="1">Yes, elevator</option></select>
+      </label>
+      <label class="f"><span>Carry from truck</span>
+        <select id="carryTo"><option value="0">Under 75 ft</option><option value="1">Over 75 ft</option></select>
+      </label>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step">
+    <header><div class="num">4</div><h2>Add-on services</h2></header>
+    <p class="hint">Skip anything you'd rather handle yourself.</p>
+
+    <p class="sub">Packing</p>
+    <div class="seg" id="packing"></div>
+
+    <p class="sub">Everything else</p>
+    <div class="checks">
+      <label class="chk"><input type="checkbox" id="svcSupplies"><div>Boxes, tape, and blankets<small>Priced by volume</small></div></label>
+      <label class="chk"><input type="checkbox" id="svcDisasm"><div>Disassemble and reassemble furniture<small>Beds, tables, shelving units</small></div></label>
+      <label class="chk"><input type="checkbox" id="svcStorage"><div>Hold my things in storage<small>Billed monthly by volume</small></div></label>
+    </div>
+  </section>
+
+  <!-- STEP 5 -->
+  <section class="step" id="contact">
+    <header><div class="num">5</div><h2>Where to send it</h2></header>
+    <p class="hint">We'll email your written estimate and text you if the date is tight.</p>
+
+    <div class="fields">
+      <label class="f"><span>Name</span><input type="text" id="cName" autocomplete="name" placeholder="Full name"></label>
+      <label class="f"><span>Email</span><input type="email" id="cEmail" autocomplete="email" placeholder="you@example.com"></label>
+      <label class="f"><span>Mobile</span><input type="tel" id="cPhone" autocomplete="tel" placeholder="(434) 555-0142"></label>
+      <label class="f"><span>Move date</span><input type="date" id="cDate"></label>
+    </div>
+    <div style="margin-top:12px">
+      <label class="f"><span>Anything we should know?</span><textarea id="cNotes" placeholder="Tight driveway, third-floor walk-up, need it done before noon…"></textarea></label>
+    </div>
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="cSms" checked><div>Text me the confirmation too<small>Standard message rates apply</small></div></label>
+  </section>
+
+</div>
+
+<!-- ================= LOAD PANEL ================= -->
+<aside class="loadcol" id="loadcol" data-open="false">
+
+  <button class="drawer" id="drawer" aria-expanded="false" aria-controls="panelBody">
+    <span>Estimate</span>
+    <span class="amt" id="drawerAmt">—</span>
+    <span class="chev" id="chev">Show ▲</span>
+  </button>
+
+  <div class="collapsible" id="panelBody">
+    <h3>Load meter</h3>
+
+    <svg class="bay" viewBox="0 0 340 176" role="img" aria-labelledby="bayTitle">
+      <title id="bayTitle">Truck load meter</title>
+      <!-- cab -->
+      <path class="cab" d="M14 146 L14 104 L38 104 L52 78 L84 78 L84 146 Z"/>
+      <!-- box outline -->
+      <rect class="body" x="90" y="24" width="236" height="122"/>
+      <!-- fill -->
+      <rect class="fill" id="fill" x="92" y="144" width="232" height="0"/>
+      <!-- ticks -->
+      <g id="ticks"></g>
+      <!-- ground -->
+      <line x1="0" y1="152" x2="340" y2="152" stroke="var(--line)" stroke-width="1"/>
+      <circle class="wheel" cx="52" cy="156" r="13"/>
+      <circle class="wheel" cx="252" cy="156" r="13"/>
+      <circle class="wheel" cx="288" cy="156" r="13"/>
+    </svg>
+
+    <dl class="readout">
+      <div><dt>Volume</dt><dd id="outVol">0<small>cu ft</small></dd></div>
+      <div><dt>Truck</dt><dd id="outTruck">—</dd></div>
+      <div><dt>Crew</dt><dd id="outCrew">—</dd></div>
+      <div><dt>On site</dt><dd id="outHours">—</dd></div>
+    </dl>
+
+    <div class="quote">
+      <div class="lbl" id="quoteLbl">Estimated total</div>
+      <div class="band"><span id="lo">$0</span><span class="dash">–</span><span id="hi">$0</span></div>
+      <div class="basis" id="basis">Pick a home size to start.</div>
+    </div>
+
+    <div class="breakdown" id="breakdown"></div>
+
+    <button class="cta" id="submitBtn">Send me this estimate</button>
+    <p class="finelabel">Not a binding contract. Final price is confirmed after a walkthrough or video survey.</p>
+
+    <div class="result" id="result">
+      <b id="resultTitle">Estimate sent</b>
+      <p id="resultBody"></p>
+    </div>
+  </div>
+</aside>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — every rate lives here. Edit these, nothing else.
+   ============================================================ */
+const CONFIG = {
+  /* Set this to your backend once it's live. Leave empty to fall
+     back to a prefilled email to booking@waigalmovers.com. */
+  apiEndpoint: "",
+  bookingEmail: "booking@waigalmovers.com",
+
+  localRadiusMiles: 50,
+  minHours: 3,
+  truckFee: 95,
+
+  // crew size -> hourly rate + job throughput in cubic feet/hour
+  crew: {
+    2: { rate: 129, throughput: 110 },
+    3: { rate: 169, throughput: 150 },
+    4: { rate: 209, throughput: 185 }
+  },
+
+  perMileBeyondRadius: 1.35,
+  fuelSurchargePct: 0.06,
+
+  longDistance: {
+    perCuFt: 0.55,
+    perCuFtPerMile: 0.0022,
+    minimum: 1400
+  },
+
+  packingHoursFactor: { none: 0, partial: 0.18, full: 0.40 }, // % added to labor hours
+  supplyPerCuFt: 0.28,
+  disassemblyFlat: 145,
+  storagePerCuFtMonth: 0.42,
+
+  rangeSpread: 0.12   // ± around the point estimate
+};
+
+const HOME_SIZES = [
+  { id:"studio", label:"Studio",  cuft:250  },
+  { id:"1br",    label:"1 bed",   cuft:380  },
+  { id:"2br",    label:"2 bed",   cuft:620  },
+  { id:"3br",    label:"3 bed",   cuft:960  },
+  { id:"4br",    label:"4 bed",   cuft:1350 },
+  { id:"5br",    label:"5+ bed",  cuft:1800 },
+  { id:"office", label:"Office",  cuft:500  }
+];
+
+const DENSITY = [
+  { id:"light",  label:"Sparse",   mult:0.80 },
+  { id:"avg",    label:"Average",  mult:1.00 },
+  { id:"packed", label:"Packed",   mult:1.28 }
+];
+
+const PACKING = [
+  { id:"none",    label:"I'll pack" },
+  { id:"partial", label:"Kitchen & fragiles" },
+  { id:"full",    label:"Pack everything" }
+];
+
+// cuft = volume added; fee = specialty handling charge per unit
+const ITEMS = [
+  { id:"sectional", label:"Sectional sofa",     cuft:65,  fee:0   },
+  { id:"kingbed",   label:"King bed set",       cuft:70,  fee:0   },
+  { id:"fridge",    label:"Refrigerator",       cuft:32,  fee:0   },
+  { id:"washer",    label:"Washer",             cuft:16,  fee:0   },
+  { id:"dryer",     label:"Dryer",              cuft:16,  fee:0   },
+  { id:"tv",        label:"TV 65\" or larger",  cuft:12,  fee:25  },
+  { id:"treadmill", label:"Treadmill / gym",    cuft:28,  fee:40  },
+  { id:"piano",     label:"Upright piano",      cuft:70,  fee:250 },
+  { id:"grand",     label:"Grand piano",        cuft:110, fee:475 },
+  { id:"pooltable", label:"Pool table",         cuft:100, fee:300 },
+  { id:"safe",      label:"Gun / floor safe",   cuft:22,  fee:200 },
+  { id:"mower",     label:"Riding mower",       cuft:60,  fee:75  },
+  { id:"moto",      label:"Motorcycle",         cuft:90,  fee:150 },
+  { id:"aquarium",  label:"Large aquarium",     cuft:20,  fee:120 }
+];
+
+const TRUCKS = [
+  { label:"10 ft", cuft:400  },
+  { label:"15 ft", cuft:760  },
+  { label:"20 ft", cuft:1015 },
+  { label:"26 ft", cuft:1600 }
+];
+const MAX_CUFT = TRUCKS[TRUCKS.length-1].cuft;
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  homeSize:null, density:"avg", packing:"none",
+  counts:Object.fromEntries(ITEMS.map(i=>[i.id,0]))
+};
+
+const $ = id => document.getElementById(id);
+const money = n => "$" + Math.round(n).toLocaleString("en-US");
+
+/* ============================================================
+   BUILD THE CONTROLS
+   ============================================================ */
+function segment(hostId, options, key, showCuft){
+  const host = $(hostId);
+  host.innerHTML = "";
+  options.forEach(o=>{
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-pressed", state[key] === o.id);
+    b.innerHTML = o.label + (showCuft ? `<small>${o.cuft} cu ft</small>` : "");
+    b.onclick = () => {
+      state[key] = o.id;
+      [...host.children].forEach(c=>c.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true");
+      recalc();
+    };
+    host.appendChild(b);
+  });
+}
+
+function buildItems(){
+  const host = $("items");
+  ITEMS.forEach(it=>{
+    const row = document.createElement("div");
+    row.className = "item";
+    row.innerHTML = `
+      <div class="nm"><b>${it.label}</b><i>${it.cuft} cu ft${it.fee?` · +$${it.fee}`:""}</i></div>
+      <div class="stepper">
+        <button type="button" aria-label="Remove one ${it.label}" disabled>−</button>
+        <output>0</output>
+        <button type="button" aria-label="Add one ${it.label}">+</button>
+      </div>`;
+    const [minus, plus] = row.querySelectorAll("button");
+    const out = row.querySelector("output");
+    const sync = () => {
+      const n = state.counts[it.id];
+      out.textContent = n;
+      minus.disabled = n === 0;
+      row.classList.toggle("on", n > 0);
+      recalc();
+    };
+    minus.onclick = () => { if(state.counts[it.id]>0) state.counts[it.id]--; sync(); };
+    plus.onclick  = () => { if(state.counts[it.id]<12) state.counts[it.id]++; sync(); };
+    host.appendChild(row);
+  });
+}
+
+function buildTicks(){
+  const g = $("ticks");
+  TRUCKS.forEach(t=>{
+    const pct = t.cuft / MAX_CUFT;
+    const y = 144 - (120 * pct);
+    const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("class","tick"); line.dataset.cap = t.cuft;
+    line.setAttribute("x1",92); line.setAttribute("x2",324);
+    line.setAttribute("y1",y);  line.setAttribute("y2",y);
+    const txt = document.createElementNS("http://www.w3.org/2000/svg","text");
+    txt.setAttribute("class","ticklabel"); txt.dataset.cap = t.cuft;
+    txt.setAttribute("x",328); txt.setAttribute("y",y+3);
+    txt.textContent = t.label;
+    g.appendChild(line); g.appendChild(txt);
+  });
+}
+
+/* ============================================================
+   THE PRICING ENGINE
+   ============================================================ */
+function volume(){
+  const base = HOME_SIZES.find(h=>h.id===state.homeSize);
+  if(!base) return 0;
+  const dens = DENSITY.find(d=>d.id===state.density).mult;
+  const extras = ITEMS.reduce((s,i)=> s + i.cuft * state.counts[i.id], 0);
+  return Math.round(base.cuft * dens + extras);
+}
+
+function specialtyFees(){
+  return ITEMS.reduce((s,i)=> s + i.fee * state.counts[i.id], 0);
+}
+
+function accessMultiplier(){
+  let m = 1;
+  const flights = +$("stairsFrom").value + +$("stairsTo").value;
+  m += flights * 0.07;
+  m += (+$("elevFrom").value + +$("elevTo").value) * 0.10;
+  m += (+$("carryFrom").value + +$("carryTo").value) * 0.09;
+  return m;
+}
+
+function crewFor(v){
+  if(v <= 450) return 2;
+  if(v <= 1000) return 3;
+  return 4;
+}
+
+function truckFor(v){
+  const t = TRUCKS.find(t => v <= t.cuft * 0.88);
+  if(t) return { label:t.label, trips:1 };
+  const trips = Math.ceil(v / (MAX_CUFT * 0.88));
+  return { label:"26 ft", trips };
+}
+
+function estimate(){
+  const v = volume();
+  if(!v) return null;
+
+  const miles = Math.max(0, +$("miles").value || 0);
+  const isLocal = miles <= CONFIG.localRadiusMiles;
+  const crewSize = crewFor(v);
+  const crew = CONFIG.crew[crewSize];
+  const truck = truckFor(v);
+
+  let hours = (v / crew.throughput) * accessMultiplier();
+  hours *= (1 + CONFIG.packingHoursFactor[state.packing]);
+  if(isLocal) hours = Math.max(hours, CONFIG.minHours);
+  if(truck.trips > 1) hours *= (1 + 0.15 * (truck.trips - 1));
+  hours = Math.round(hours * 4) / 4;
+
+  const lines = [];
+  let total = 0;
+
+  if(isLocal){
+    const labor = hours * crew.rate;
+    lines.push([`${crewSize} movers × ${hours} hrs @ $${crew.rate}/hr`, labor]);
+    total += labor;
+    lines.push([`Truck & travel fee`, CONFIG.truckFee]);
+    total += CONFIG.truckFee;
+  } else {
+    const ld = CONFIG.longDistance;
+    const base = Math.max(ld.minimum, v * ld.perCuFt + v * miles * ld.perCuFtPerMile);
+    lines.push([`Line haul · ${v} cu ft × ${miles} mi`, base]);
+    total += base;
+    const fuel = base * CONFIG.fuelSurchargePct;
+    lines.push([`Fuel surcharge`, fuel]);
+    total += fuel;
+  }
+
+  if(isLocal && miles > 0){
+    const drive = miles * CONFIG.perMileBeyondRadius;
+    lines.push([`Mileage · ${miles} mi`, drive]);
+    total += drive;
+  }
+
+  const spec = specialtyFees();
+  if(spec){ lines.push(["Specialty item handling", spec]); total += spec; }
+
+  if($("svcSupplies").checked){
+    const s = v * CONFIG.supplyPerCuFt;
+    lines.push(["Boxes & materials", s]); total += s;
+  }
+  if($("svcDisasm").checked){
+    lines.push(["Disassembly & reassembly", CONFIG.disassemblyFlat]);
+    total += CONFIG.disassemblyFlat;
+  }
+
+  const storage = $("svcStorage").checked ? v * CONFIG.storagePerCuFtMonth : 0;
+
+  return {
+    volume:v, miles, isLocal, crewSize, hours, truck,
+    lines, total, storage,
+    lo: total * (1 - CONFIG.rangeSpread),
+    hi: total * (1 + CONFIG.rangeSpread)
+  };
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function recalc(){
+  const v = volume();
+  const pct = Math.min(1, v / MAX_CUFT);
+  const h = 120 * pct;
+
+  const fill = $("fill");
+  fill.setAttribute("height", h);
+  fill.setAttribute("y", 144 - h);
+  fill.classList.toggle("over", v > MAX_CUFT * 0.88);
+
+  document.querySelectorAll("#ticks .tick, #ticks .ticklabel").forEach(el=>{
+    el.classList.toggle("passed", v >= +el.dataset.cap * 0.88);
+  });
+
+  $("outVol").innerHTML = v.toLocaleString() + "<small>cu ft</small>";
+
+  const e = estimate();
+  if(!e){
+    $("outTruck").textContent = "—";
+    $("outCrew").textContent  = "—";
+    $("outHours").textContent = "—";
+    $("lo").textContent = "$0"; $("hi").textContent = "$0";
+    $("basis").textContent = "Pick a home size to start.";
+    $("breakdown").innerHTML = "";
+    $("drawerAmt").textContent = "—";
+    $("submitBtn").disabled = true;
+    return;
+  }
+
+  $("submitBtn").disabled = false;
+  $("outTruck").innerHTML = e.truck.label + (e.truck.trips>1 ? `<small>×${e.truck.trips}</small>` : "");
+  $("outCrew").innerHTML  = e.crewSize + "<small>movers</small>";
+  $("outHours").innerHTML = e.isLocal ? e.hours + "<small>hrs</small>" : "—";
+
+  $("quoteLbl").textContent = e.isLocal ? "Estimated total · hourly" : "Estimated total · flat rate";
+  $("lo").textContent = money(e.lo);
+  $("hi").textContent = money(e.hi);
+  $("drawerAmt").textContent = money(e.lo) + "–" + money(e.hi);
+
+  $("basis").textContent = e.isLocal
+    ? `Local move under ${CONFIG.localRadiusMiles} mi, billed hourly with a ${CONFIG.minHours}-hour minimum.`
+    : `Long-distance move at a flat rate. Delivery window quoted after booking.`;
+
+  const rows = e.lines.map(([l,amt]) =>
+    `<div class="row"><span>${l}</span><span>${money(amt)}</span></div>`).join("");
+  const storageRow = e.storage
+    ? `<div class="row muted"><span>Storage, per month</span><span>${money(e.storage)}</span></div>` : "";
+  $("breakdown").innerHTML = rows + storageRow;
+}
+
+/* ============================================================
+   SUBMIT
+   ============================================================ */
+function payload(){
+  const e = estimate();
+  return {
+    submittedAt: new Date().toISOString(),
+    customer:{
+      name:$("cName").value.trim(),
+      email:$("cEmail").value.trim(),
+      phone:$("cPhone").value.trim(),
+      smsOptIn:$("cSms").checked,
+      moveDate:$("cDate").value,
+      notes:$("cNotes").value.trim()
+    },
+    move:{
+      homeSize:state.homeSize, density:state.density, packing:state.packing,
+      items:Object.fromEntries(Object.entries(state.counts).filter(([,n])=>n>0)),
+      zipFrom:$("zipFrom").value.trim(), zipTo:$("zipTo").value.trim(),
+      miles:e.miles,
+      access:{
+        stairsFrom:+$("stairsFrom").value, stairsTo:+$("stairsTo").value,
+        elevatorFrom:!!+$("elevFrom").value, elevatorTo:!!+$("elevTo").value,
+        longCarryFrom:!!+$("carryFrom").value, longCarryTo:!!+$("carryTo").value
+      },
+      addOns:{
+        supplies:$("svcSupplies").checked,
+        disassembly:$("svcDisasm").checked,
+        storage:$("svcStorage").checked
+      }
+    },
+    estimate:{
+      cubicFeet:e.volume, truck:e.truck.label, trips:e.truck.trips,
+      crewSize:e.crewSize, hours:e.hours, rateType:e.isLocal?"hourly":"flat",
+      low:Math.round(e.lo), high:Math.round(e.hi),
+      lineItems:e.lines.map(([label,amount])=>({label,amount:Math.round(amount)}))
+    }
+  };
+}
+
+function showResult(ok, title, body){
+  const r = $("result");
+  r.classList.add("show");
+  r.style.borderColor = ok ? "var(--go)" : "#E8623F";
+  r.style.borderLeftColor = ok ? "var(--go)" : "#E8623F";
+  $("resultTitle").style.color = ok ? "var(--go)" : "#E8623F";
+  $("resultTitle").textContent = title;
+  $("resultBody").innerHTML = body;
+}
+
+$("submitBtn").onclick = async () => {
+  const name = $("cName").value.trim();
+  const email = $("cEmail").value.trim();
+  if(!name || !email.includes("@")){
+    $("contact").scrollIntoView({block:"center"});
+    $("cName").focus();
+    showResult(false, "Add your name and email",
+      "We need both to send the written estimate.");
+    return;
+  }
+
+  const data = payload();
+  const btn = $("submitBtn");
+  btn.disabled = true; btn.textContent = "Sending…";
+
+  if(!CONFIG.apiEndpoint){
+    const q = data.estimate;
+    const body = encodeURIComponent(
+      `Name: ${data.customer.name}\nPhone: ${data.customer.phone}\nDate: ${data.customer.moveDate}\n\n`+
+      `${q.cubicFeet} cu ft · ${q.truck} truck · ${q.crewSize} movers\n`+
+      `Estimate: $${q.low}–$${q.high}\n\n${data.customer.notes}`
+    );
+    window.location.href =
+      `mailto:${CONFIG.bookingEmail}?subject=${encodeURIComponent("Quote request — "+name)}&body=${body}`;
+    btn.disabled = false; btn.textContent = "Send me this estimate";
+    showResult(true, "Opening your email app",
+      `No backend is connected yet, so this opens a prefilled message to ${CONFIG.bookingEmail}.`);
+    return;
+  }
+
+  try{
+    const res = await fetch(CONFIG.apiEndpoint, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data)
+    });
+    if(!res.ok) throw new Error(res.status);
+    const out = await res.json();
+    btn.textContent = "Estimate sent";
+    showResult(true, "Estimate sent",
+      `Check ${email} for your written quote${data.customer.smsOptIn ? " — a text is on the way too" : ""}. `+
+      `Reference ${out.quoteId || "pending"}.`);
+  }catch(err){
+    btn.disabled = false; btn.textContent = "Try sending again";
+    showResult(false, "That didn't go through",
+      `Send it straight to <a href="mailto:${CONFIG.bookingEmail}">${CONFIG.bookingEmail}</a> and we'll pick it up from there.`);
+  }
+};
+
+/* ============================================================
+   WIRE UP
+   ============================================================ */
+segment("homeSize", HOME_SIZES, "homeSize", true);
+segment("density",  DENSITY,    "density",  false);
+segment("packing",  PACKING,    "packing",  false);
+buildItems();
+buildTicks();
+
+["miles","stairsFrom","stairsTo","elevFrom","elevTo","carryFrom","carryTo",
+ "svcSupplies","svcDisasm","svcStorage"].forEach(id=>{
+  $(id).addEventListener("change", recalc);
+  $(id).addEventListener("input", recalc);
+});
+
+$("drawer").onclick = () => {
+  const col = $("loadcol");
+  const open = col.dataset.open === "true";
+  col.dataset.open = String(!open);
+  $("drawer").setAttribute("aria-expanded", String(!open));
+  $("chev").textContent = open ? "Show ▲" : "Hide ▼";
+};
+
+recalc();
+</script>
+</body>
+</html>

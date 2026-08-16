@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Waigal Movers cost estimator — quote capture and notification pipeline.
+  API Gateway (HTTP API) -> Lambda -> DynamoDB -> Streams -> notifier -> SES + SNS.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: Origin of the estimator page, e.g. https://waigalmovers.com
+  FromAddress:
+    Type: String
+    Description: SES-verified sender, e.g. quotes@waigalmovers.com
+  OwnerEmail:
+    Type: String
+    Description: Where new-lead alerts go
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 256
+    Timeout: 15
+    Architectures: [arm64]        # Graviton — cheaper per ms than x86
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: estimator
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+
+Resources:
+
+  # ---------------------------------------------------------------- storage
+  QuotesTable:
+    Type: AWS::DynamoDB::Table
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Sub "waigal-quotes-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk,     AttributeType: S }
+        - { AttributeName: sk,     AttributeType: S }
+        - { AttributeName: gsi1pk, AttributeType: S }
+        - { AttributeName: gsi1sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        # "Show me every lead from a given day, newest first."
+        - IndexName: byDate
+          KeySchema:
+            - { AttributeName: gsi1pk, KeyType: HASH }
+            - { AttributeName: gsi1sk, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # ------------------------------------------------------------ shared code
+  PricingLayer:
+    Type: AWS::Serverless::LayerVersion
+    Metadata:
+      BuildMethod: python3.12
+    Properties:
+      LayerName: !Sub "waigal-pricing-${Stage}"
+      ContentUri: layers/pricing/
+      CompatibleRuntimes: [python3.12]
+      CompatibleArchitectures: [arm64]
+
+  # ------------------------------------------------------------------- api
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      CorsConfiguration:
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowHeaders: [Content-Type]
+        AllowMethods: [GET, POST, OPTIONS]
+      Throttle:
+        BurstLimit: 20
+        RateLimit: 10
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiLogs.Arn
+        Format: '{"reqId":"$context.requestId","ip":"$context.identity.sourceIp","route":"$context.routeKey","status":"$context.status","latency":"$context.responseLatency"}'
+
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/http-api/waigal-estimator-${Stage}"
+      RetentionInDays: 90
+
+  SubmitQuoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/submit_quote/
+      Handler: app.handler
+      Layers: [!Ref PricingLayer]
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref QuotesTable
+      Policies:
+        - DynamoDBWritePolicy: { TableName: !Ref QuotesTable }
+      Events:
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /quotes
+            Method: POST
+
+  GetRatesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/get_rates/
+      Handler: app.handler
+      Layers: [!Ref PricingLayer]
+      Events:
+        Get:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /rates
+            Method: GET
+
+  # --------------------------------------------------------- notifications
+  OwnerTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "waigal-new-quote-${Stage}"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref OwnerEmail
+
+  NotifierDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "waigal-notifier-dlq-${Stage}"
+      MessageRetentionPeriod: 1209600   # 14 days
+
+  NotifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/notifier/
+      Handler: app.handler
+      Timeout: 30
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref QuotesTable
+          FROM_ADDRESS: !Ref FromAddress
+          REPLY_TO: !Ref OwnerEmail
+          OWNER_TOPIC_ARN: !Ref OwnerTopic
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref QuotesTable }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt OwnerTopic.TopicName }
+        - Statement:
+            - Effect: Allow
+              Action: [ses:SendEmail]
+              Resource: "*"
+        - SQSSendMessagePolicy: { QueueName: !GetAtt NotifierDLQ.QueueName }
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt QuotesTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt NotifierDLQ.Arn
+
+  # ------------------------------------------------------------- alarming
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A quote notification failed every retry.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotifierDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Ref OwnerTopic]
+
+Outputs:
+  ApiEndpoint:
+    Description: Put this in CONFIG.apiEndpoint in the estimator page
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  TableName:
+    Value: !Ref QuotesTable
