@@ -87,9 +87,9 @@ Resources:
         AllowOrigins: [!Ref AllowedOrigin]
         AllowHeaders: [Content-Type]
         AllowMethods: [GET, POST, OPTIONS]
-      Throttle:
-        BurstLimit: 20
-        RateLimit: 10
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
       AccessLogSettings:
         DestinationArn: !GetAtt ApiLogs.Arn
         Format: '{"reqId":"$context.requestId","ip":"$context.identity.sourceIp","route":"$context.routeKey","status":"$context.status","latency":"$context.responseLatency"}'
